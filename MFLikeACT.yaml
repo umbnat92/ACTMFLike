@@ -1,0 +1,202 @@
+data_folder: /data/ACT/
+use_sacc: False #Set True if the input files are in .sacc format
+
+bintt: 52
+binte: 52
+binee: 52
+
+# maximum ell for windows and for cross spectra
+lmax_win: 7925
+tt_lmax: 6000
+
+enable_tt: True
+enable_te: True
+enable_ee: True
+
+specname: [coadd_cl_15mJy_data_200124.txt,coadd_cl_100mJy_data_200124.txt]
+covname: [coadd_cov_15mJy_200519.txt, coadd_cov_100mJy_200519.txt]
+bpwfname: [coadd_bpwf_15mJy_191127_lmin2.txt,coadd_bpwf_100mJy_191127_lmin2.txt]
+
+doLeakage: True
+
+leak_TE: [leak_TE_deep_200519.txt,leak_TE_wide_200519.txt]
+
+data:
+  frequencies: [98, 150]
+  regions: ["deep", "wide"]
+
+spectra:
+  use_spectra: ["tt", "te", "ee"]
+  
+  combinations: 
+    tt: [[98,98],[98,150],[150,150]]
+    ee: [[98,98],[98,150],[150,150]]
+    te: [[98,98],[98,150],[150,98],[150,150]]
+  bin:
+    tt: 52
+    te: 52
+    ee: 52
+
+foregrounds:
+  normalisation:
+    nu_0: 150.0
+    ell_0: 3000
+    T_CMB: 2.725
+
+  partitions: ["both","deep","wide"]
+
+  frequencies: 
+    nominal: [98, 150]
+    fdust: [98.8, 151.2]
+    fsz: [98.4, 150.1]
+    fsyn: [95.8, 147.2]
+
+  external_cl: 
+    logical: True
+    cibc: /data/Foregrounds/cl_cib_extra.dat
+    tszxcib: /data/Foregrounds/sz_x_cib_template.dat
+
+  components:
+    tt:
+      - kSZ
+      - cibp
+      - radio
+      - tSZ
+      - cibc
+      - tszxcmb
+      - dust
+    te: 
+      - radio
+      - dust
+    ee: 
+      - radio
+      - dust
+
+params:
+  #Calibration
+  yp1:
+    prior:
+      min: 0.9
+      max: 1.1
+    proposal: 1
+    latex: y^\mathrm{P}_{98}
+  yp2:
+    prior:
+      min: 0.9
+      max: 1.1
+    proposal: 1
+    latex: y^\mathrm{P}_{150}
+  # Foregrounds
+  a_tSZ:
+    prior:
+      min: 0
+      max: 10
+    proposal: 0.5
+    latex: A_\mathrm{tSZ}
+  a_kSZ:
+    prior:
+      min: 0
+      max: 1.8
+    proposal: 0.1
+    latex: A_\mathrm{kSZ}
+  xi:
+    prior:
+      min: 0
+      max: 0.2
+    proposal: 0.1
+    latex: \xi
+  a_p:
+    prior:
+      min: 2
+      max: 7.6
+    proposal: 0.3
+    latex: A_\mathrm{d}
+  a_c:
+    prior:
+      dist: norm
+      loc: 4.9
+      scale: 0.9
+    proposal: 0.9
+    latex: A_\mathrm{c}
+  beta_p:
+    prior:
+      min: 2.0
+      max: 4.
+    proposal: 0.3
+    latex: \beta_\mathrm{c}
+  a_sw:
+    prior:
+      min: 18
+      max: 30
+    proposal: 0.3
+    latex: A_\mathrm{s,w}
+  a_sd:
+    prior:
+      dist: norm
+      loc: 3.1
+      scale: 0.4
+    proposal: 0.4
+    latex: A_\mathrm{s,d}
+  a_gw:
+    prior:
+      dist: norm
+      loc: 8.77
+      scale: 0.3
+    proposal: 0.3
+    latex: A_\mathrm{dust,w}^\mathrm{TT}
+  a_gd:
+    prior:
+      dist: norm
+      loc: 2.79
+      scale: 0.45
+    proposal: 0.4
+    latex: A_\mathrm{dust,d}^\mathrm{TT}
+  a_gtew:
+    prior:
+      dist: norm
+      loc: 0.36
+      scale: 0.04
+    proposal: 0.04
+    latex: A_\mathrm{dust,w}^\mathrm{TE}
+  a_gted:
+    prior:
+      dist: norm
+      loc: 0.11
+      scale: 0.10
+    proposal: 0.1
+    latex: A_\mathrm{dust,d}^\mathrm{TE}
+  a_geew:
+    prior:
+      dist: norm
+      loc: 0.13
+      scale: 0.03
+    proposal: 0.03
+    latex: A_\mathrm{dust,w}^\mathrm{EE}
+  a_geed:
+    prior:
+      dist: norm
+      loc: 0.04
+      scale: 0.08
+    proposal: 0.08
+    latex: A_\mathrm{dust,d}^\mathrm{EE}
+  a_pste:
+    prior:
+      min: -1
+      max: 1
+    proposal: 0.05
+    latex: A_\mathrm{ps}^\mathrm{TE}
+  a_psee:
+    prior:
+      min: 0
+      max: 0.1
+    proposal: 0.05
+    latex: A_\mathrm{ps}^\mathrm{EE}
+  T_d: 
+    value: 9.7
+    latex: T_d
+  T_dd: 
+    value: 19.6
+    latex: T_{dd}
+  n_CIBC: 
+    value: 1.2
+    latex: n_\mathrm{CIB-C}
