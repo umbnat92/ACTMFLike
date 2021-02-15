@@ -24,7 +24,7 @@ To install the likelihood and all required code, such as [CAMB](https://github.c
 $ cobaya-install /where/to/clone/examples/MFLikeACT_example.yaml -p /where/to/put/packages
 ```
 
-At this stage you can modify the path of dataset (including foregrounds) inside the `MFLikeACT_example.yaml` file.
+At this stage you can modify the path of dataset (including foregrounds) inside the `MFLikeACT_example.yaml` file. The data are available at [this](https://lambda.gsfc.nasa.gov/product/act/act_dr4_likelihood_multi_info.cfm) page. 
 
 ## Running the code
 
