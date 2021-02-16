@@ -36,4 +36,4 @@ $ cobaya-run /where/to/clone/examples/MFLikeACT_example.yaml -p /where/to/put/pa
 
 ## License
 
-This code was made jointly by Umberto Natale and use the python transcription of the original Fortran code made by Hidde Jense. The code that calculate the log-likelihood for an ACT foreground model is available [here](https://github.com/HTJense/loglike). 
+This code was made by Umberto Natale and use the python transcription of the original Fortran code made by Hidde Jense. The code that calculate the log-likelihood for an ACT foreground model is available [here](https://github.com/HTJense/loglike). 
