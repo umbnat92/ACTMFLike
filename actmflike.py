@@ -284,7 +284,7 @@ class MFLikeACT(Likelihood):
 
     def calibrate(self,vecmodel):
         for r in range(self.nlike):
-            self.log.debug("Calibrate region {}".format(self.region[r]))
+            self.log.debug("Calibrate region {}".format(self.regions[r]))
             # calibrate TT
             self.log.debug("Calibrate TT")
             for j in range(self.lenbin["tt"]):
