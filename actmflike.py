@@ -81,12 +81,6 @@ class MFLikeACT(Likelihood):
             self.log.debug('Read sacc file to be implemented...')
             sys.exit()
 
-        self.logp_const = {self.regions[r]:np.log(2 * np.pi) * (-len(self.b_dat[self.regions[r]]) / 2)
-                                -0.5 * np.linalg.slogdet(self.covmat[self.regions[r]])[1]
-                                for r in range(self.nlike)}
-        self.logp_const_t = 0
-        for r in range(self.nlike):
-            self.logp_const_t += self.logp_const[self.regions[r]]
 
         self.inv_cov = {self.regions[r]:np.linalg.inv(self.covmat[self.regions[r]])
                                 for r in range(self.nlike)}
@@ -344,10 +338,12 @@ class MFLikeACT(Likelihood):
 
         for r in range(self.nlike):
             diff_vec = self.b_dat[self.regions[r]] - x_model[self.regions[r]]
-            logptmp = - 0.5 * np.matmul(diff_vec, np.matmul(self.inv_cov[self.regions[r]], diff_vec))
-            logp += logptmp + self.logp_const[self.regions[r]]
+            logptmp = - 0.5 * diff_vec @ self.inv_cov[self.regions[r]] @ diff_vec
+            logp += logptmp
         
-            self.log.debug("Χ² - {} = {})".format(self.regions[r],-2 * logptmp))
+            self.log.debug(
+            "Χ² value computed for region {}"
+            "Χ² = {}".format(self.regions[r],-2 * logptmp))
         return logp
     
     
