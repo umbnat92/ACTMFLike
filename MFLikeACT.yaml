@@ -90,13 +90,11 @@ params:
   a_tSZ:
     prior:
       min: 0
-      max: 10
     proposal: 0.5
     latex: A_\mathrm{tSZ}
   a_kSZ:
     prior:
       min: 0
-      max: 1.8
     proposal: 0.1
     latex: A_\mathrm{kSZ}
   xi:
@@ -160,6 +158,8 @@ params:
     latex: A_\mathrm{dust,w}^\mathrm{TE}
   a_gted:
     prior:
+      min: 0
+    ref:
       dist: norm
       loc: 0.11
       scale: 0.10
@@ -174,6 +174,8 @@ params:
     latex: A_\mathrm{dust,w}^\mathrm{EE}
   a_geed:
     prior:
+      min: 0
+    ref:
       dist: norm
       loc: 0.04
       scale: 0.08
