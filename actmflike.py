@@ -180,8 +180,9 @@ class MFLikeACT(Likelihood):
         Method returning dictionary of requests from a theory code component, if needed.
         See https://cobaya.readthedocs.io/en/latest/likelihoods.html
         """
-        self.l_max = 9000
-        return {"Cl": {cl: self.l_max for cl in self.required_cl}}
+        #self.l_max = 9000
+
+        return {"Cl": {cl: self.tt_lmax for cl in self.required_cl}}
 
 
     def prepare_clidx_dict(self):
@@ -205,16 +206,18 @@ class MFLikeACT(Likelihood):
 
     def _get_power_spectra(self,cl,fg_model):
         x_model = {self.regions[s]: np.zeros(self.nbin) for s in range(self.nlike)}
-        
+
         for r in range(self.nlike):
             for s in self.required_cl:
+                cltmp = np.zeros(self.lmax_win+1)
+                cltmp[2:self.tt_lmax+1] = cl[s][2:self.tt_lmax+1]
                 for j in range(self.lenbin[s]):
                     sidx1 = self.freqspec[s,"freq1"][j]
                     sidx2 = self.freqspec[s,"freq2"][j]
                     bidx1 = self.nbisp[s,'bin'+np.str(j)]
                     bidx2 = self.nbisp[s,'bin'+np.str(j+1)]
                     x_model[self.regions[r]][bidx1:bidx2] = self.win_func[self.regions[r]][bidx1:bidx2,:self.lmax_win] \
-                                @ ((cl[s][2:self.shape+2] + fg_model[s,'all',sidx1,sidx2,"both"] \
+                                @ ((cltmp[2:self.lmax_win+1] + fg_model[s,'all',sidx1,sidx2,"both"]\
                                     + fg_model[s,'all',sidx1,sidx2,self.regions[r]])*self.ellfact)
                     self.log.debug('Spectrum: '+s+
                                     ', freq1 = '+np.str(sidx1)+
