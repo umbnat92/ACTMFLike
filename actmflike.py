@@ -18,21 +18,6 @@ class MFLikeACT(Likelihood):
         """
          Prepare any computation, importing any necessary code, files, etc.
         """
-        self.cells = None
-        self.win_ells = None
-        self.b_ell = None
-        self.ells = None
-        
-        # Total number of bins per cross spectrum
-        self.nbintt = []
-        self.nbinte = []
-        self.nbinee = []
-        
-        # Which frequencies are crossed per spectrum
-        self.crosstt = []
-        self.crosste = []
-        self.crossee = []
-        
         self.freqs = []
         nfreq = len(self.data["frequencies"])
         for f in np.arange(nfreq):
@@ -42,6 +27,8 @@ class MFLikeACT(Likelihood):
         self.b0 = 5
         self.b1 = 0
         self.b2 = 0
+
+        self.regions = self.data["regions"] 
         
         # calibration parameters 
         self.ct = [ 1.0 for _ in self.freqs ]
@@ -63,6 +50,10 @@ class MFLikeACT(Likelihood):
         self.ellfact = 2.*np.pi/(self.l_bpws*(self.l_bpws+1.))
         self.log.debug("Initialized.")
 
+        self.log.debug("Testing the loglike computation...")
+        logp_test = self.actpol_likelihood_test_compute(self.data_folder)
+        self.log.debug("Expected Χ² = 1060.6")
+
     def prepare_data(self):
         """
         Prepare data.
@@ -71,23 +62,21 @@ class MFLikeACT(Likelihood):
 
         self.regions = self.data["regions"]
         self.nlike = len(self.regions)
-        self.log.debug("Preparing data for {} regions.".format(self.regions))
         
-
         if not self.use_sacc:
             self.log.debug("Reading data from txt ")
-            self.load_plaintext(self.specname, self.covname, self.bpwfname, data_dir = self.data_folder)
+            self.load_plaintext(data_dir = self.data_folder)
         else:
             self.log.debug('Read sacc file to be implemented...')
             sys.exit()
 
 
-        self.inv_cov = {self.regions[r]:np.linalg.inv(self.covmat[self.regions[r]])
-                                for r in range(self.nlike)}
+        self.inv_cov = {}
+        for r in self.regions:
+            self.inv_cov[r] = np.linalg.inv(self.covmat[r])
 
 
-        if self.doLeakage:
-            self.load_leakage(self.leak_TE,data_dir = self.data_folder)
+        self.load_leakage(data_dir = self.data_folder)
 
     
     def set_bins(self, bintt, binte, binee):
@@ -124,30 +113,40 @@ class MFLikeACT(Likelihood):
                 for j in range(len(self.freqs)):
                     self.crossee.append((i,j))
     
-    def load_plaintext(self, spec_filename, cov_filename, bbl_filename, data_dir = ''):
+    def load_plaintext(self, data_dir = ''):
         if self.nbin == 0:
             raise ValueError('You did not set any spectra bin sizes beforehand!')
-        if len(spec_filename)!=self.nlike:
-            raise ValueError('You need {} spectra!'.format(self.nlike))
-            sys.exit()
         
-        self.win_func = {self.regions[s]: np.loadtxt(data_dir + bbl_filename[s])[:self.nbin,:self.lmax_win]
-                                for s in range(self.nlike)}
+        self.win_func = {}
+        self.b_dat = {}
+        self.covmat = {}
 
-        self.b_dat = {self.regions[s]: np.loadtxt(data_dir + spec_filename[s],unpack=True)[:self.nbin]
-                                for s in range(self.nlike)}
-        
-        self.covmat = {self.regions[s]: np.loadtxt(data_dir + cov_filename[s], dtype = float)[:self.nbin,:self.nbin] #.reshape((self.nbin, self.nbin))
-                                for s in range(self.nlike)}
-        for r in range(self.nlike):
-            self.covmat[self.regions[r]] = self.cull_covmat(self.covmat[self.regions[r]])
+        for reg in self.regions:
+            self.log.debug("Preparing data for {} region.\n".format(reg))
+            self.log.debug(self.regions[reg])
+
+            bbl_filename = self.regions[reg]['bpwfname']
+            spec_filename = self.regions[reg]['specname']
+            cov_filename = self.regions[reg]['covname']
+            
+            self.win_func[reg] = np.loadtxt(data_dir + bbl_filename)[:self.nbin,:self.lmax_win]
+            self.b_dat[reg] = np.loadtxt(data_dir + spec_filename)[:self.nbin]
+            self.covmat[reg] = np.loadtxt(data_dir + cov_filename)[:self.nbin,:self.nbin] #.reshape((self.nbin, self.nbin))
+                                
+        for reg in self.regions:
+            self.covmat[reg] = self.cull_covmat(self.covmat[reg])
 
     
-    def load_leakage(self, leak_filename, data_dir = ''):
+    def load_leakage(self,data_dir = ''):
         # Note: this assumes all TE bins are the same length (it is hardcoded at a later point).
-        self.leakage = {self.regions[s]: np.loadtxt(data_dir + leak_filename[s],unpack=True)[:self.nbinte[0]] for s in range(self.nlike)}
-        self.a = {self.regions[s]:[1.,1.] for s in range(self.nlike)}
-        self.idxleak = {np.str(self.freqs[i]):i for i in range(len(self.freqs))}
+        self.leakage = {}
+        self.a = {}
+
+        for r in self.regions:
+            leak_filename = self.regions[r]['leak_TE']
+            self.leakage[r] = np.loadtxt(data_dir + leak_filename,unpack=True)
+            self.a[r] = [1.,1.]
+        
         
     
     def cull_covmat(self,covmat):
@@ -180,8 +179,6 @@ class MFLikeACT(Likelihood):
         Method returning dictionary of requests from a theory code component, if needed.
         See https://cobaya.readthedocs.io/en/latest/likelihoods.html
         """
-        #self.l_max = 9000
-
         return {"Cl": {cl: self.tt_lmax for cl in self.required_cl}}
 
 
@@ -205,9 +202,9 @@ class MFLikeACT(Likelihood):
             k += self.lenbin[s]
 
     def _get_power_spectra(self,cl,fg_model):
-        x_model = {self.regions[s]: np.zeros(self.nbin) for s in range(self.nlike)}
+        x_model = {r: np.zeros(self.nbin) for r in self.regions}
 
-        for r in range(self.nlike):
+        for r in self.regions:
             for s in self.required_cl:
                 cltmp = np.zeros(self.lmax_win+1)
                 cltmp[2:self.tt_lmax+1] = cl[s][2:self.tt_lmax+1]
@@ -216,105 +213,42 @@ class MFLikeACT(Likelihood):
                     sidx2 = self.freqspec[s,"freq2"][j]
                     bidx1 = self.nbisp[s,'bin'+np.str(j)]
                     bidx2 = self.nbisp[s,'bin'+np.str(j+1)]
-                    x_model[self.regions[r]][bidx1:bidx2] = self.win_func[self.regions[r]][bidx1:bidx2,:self.lmax_win] \
-                                @ ((cltmp[2:self.lmax_win+1] + fg_model[s,'all',sidx1,sidx2,"both"]\
-                                    + fg_model[s,'all',sidx1,sidx2,self.regions[r]])*self.ellfact)
-                    self.log.debug('Spectrum: '+s+
-                                    ', freq1 = '+np.str(sidx1)+
-                                    ', freq2 = '+np.str(sidx2)+
-                                    ', bin range ['+np.str(bidx1)+','+np.str(bidx2)+']')
+                    x_model[r][bidx1:bidx2] = self.win_func[r][bidx1:bidx2,:self.lmax_win] \
+                                @ ((cltmp[2:self.lmax_win+1] + fg_model[s,'all',sidx1,sidx2,r])*self.ellfact)
 
         return x_model
 
     def _doLeakage(self,vecmodel):
-        for r in range(self.nlike):          
-            self.log.debug("Leakage model {} rerion for TE".format(self.regions[r]))
-            for j in range(self.lenbin["te"]):
-                bidx1 = self.nbisp["te",'bin'+np.str(j)]
-                bidx2 = self.nbisp["te",'bin'+np.str(j+1)]
-
-                k = j - int(np.round(j/3,0)) # Trick to have the right indexing for TT
-                ttidx1 = self.nbisp["tt",'bin'+np.str(k)]
-                ttidx2 = self.nbisp["tt",'bin'+np.str(k+1)]
-
-                freq = self.freqspec["te","freq2"][j]
-                lidx = self.idxleak[np.str(freq)]
-
-                self.log.debug("bin range [{}:{}], leakage range [{}:{}], leakage idx {} ".format(bidx1,
-                                                    bidx2,ttidx1,ttidx2,lidx))
-
-                vecmodel[self.regions[r]][bidx1:bidx2] += vecmodel[self.regions[r]][ttidx1:ttidx2]*self.a[self.regions[r]][lidx]*self.leakage[self.regions[r]][lidx+1]
-            
-            self.log.debug("Leakage model {} rerion for EE".format(self.regions[r]))
-            for j in range(self.lenbin["ee"]):
-                bidx1 = self.nbisp["ee",'bin'+np.str(j)]
-                bidx2 = self.nbisp["ee",'bin'+np.str(j+1)]
-
-                ttidx1 = self.nbisp["tt",'bin'+np.str(j)]
-                ttidx2 = self.nbisp["tt",'bin'+np.str(j+1)]
-
-                k = j + int(np.round(j/3,0)) # Trick to have the right indexing for TE
-                teidx11 = self.nbisp["te",'bin'+np.str(k)]
-                teidx12 = self.nbisp["te",'bin'+np.str(k+1)]
-
-                l = j + int(np.round(j/1.5,0)) # Trick to have the right indexing for TE
-                teidx21 = self.nbisp["te",'bin'+np.str(l)]
-                teidx22 = self.nbisp["te",'bin'+np.str(l+1)]
-
-                freqj = self.freqspec["ee","freq2"][j]
-                lidxj = self.idxleak[np.str(freqj)]
-
-                freqi = self.freqspec["ee","freq1"][j]
-                lidxi = self.idxleak[np.str(freqi)]
-
-                vecmodel[self.regions[r]][bidx1:bidx2] += vecmodel[self.regions[r]][teidx11:teidx12]*self.a[self.regions[r]][lidxi]*self.leakage[self.regions[r]][lidxi+1] \
-                                                        + vecmodel[self.regions[r]][teidx21:teidx22]*self.a[self.regions[r]][lidxj]*self.leakage[self.regions[r]][lidxj+1] \
-                                                        + vecmodel[self.regions[r]][ttidx1:ttidx2]*self.a[self.regions[r]][lidxi]*self.leakage[self.regions[r]][lidxi+1] \
-                                                        * self.a[self.regions[r]][lidxj]*self.leakage[self.regions[r]][lidxj+1]
-
-                self.log.debug("bin range [{}:{}], leakage range TiTj [{}:{}], ".format(bidx1,bidx2,ttidx1,ttidx2))
-                self.log.debug("leakage range TiTj [{}:{}], ".format(teidx11,teidx12))
-                self.log.debug("leakage range TjEi [{}:{}], ".format(teidx21,teidx22))
-                self.log.debug("leakage idx i {}, leakage idx j {}.".format(lidxi,lidxj))
-            
+        for r in self.regions:
+            a1 = self.a[r][0]
+            a2 = self.a[r][1]
+            vecmodel[r][3*self.bintt:3*self.bintt+self.binte] +=  vecmodel[r][:self.bintt]*a1*self.leakage[r][1]
+            vecmodel[r][self.binte+3*self.bintt:3*self.bintt+2*self.binte] += vecmodel[r][self.bintt:2*self.bintt]*a2*self.leakage[r][2]
+            vecmodel[r][2*self.binte+3*self.bintt:3*self.bintt+3*self.binte] += vecmodel[r][self.bintt:2*self.bintt]*a1*self.leakage[r][1]
+            vecmodel[r][3*self.binte+3*self.bintt:3*self.bintt+4*self.binte] += vecmodel[r][2*self.bintt:3*self.bintt]*a2*self.leakage[r][2]
+            vecmodel[r][4*self.binte+3*self.bintt:3*self.bintt+4*self.binte+self.binee] += 2*vecmodel[r][3*self.bintt:3*self.bintt+self.binte]*a1*self.leakage[r][1]+vecmodel[r][:self.bintt]*(a1*self.leakage[r][1])**2.
+            vecmodel[r][self.binee+4*self.binte+3*self.bintt:3*self.bintt+4*self.binte+2*self.binee] += vecmodel[r][self.binte+3*self.bintt:3*self.bintt+2*self.binte]*a1*self.leakage[r][1]+vecmodel[r][2*self.binte+3*self.bintt:3*self.bintt+3*self.binte]*a2*self.leakage[r][2]+vecmodel[r][self.bintt:2*self.bintt]*a1*self.leakage[r][1]*a2*self.leakage[r][2]
+            vecmodel[r][2*self.binee+3*self.bintt+4*self.binte:3*self.bintt+4*self.binte+3*self.binee] += 2*vecmodel[r][3*self.binte+3*self.bintt:3*self.bintt+4*self.binte]*a2*self.leakage[r][2]+vecmodel[r][2*self.bintt:3*self.bintt]*(a2*self.leakage[r][2])**2
         return vecmodel
 
     def calibrate(self,vecmodel):
-        for r in range(self.nlike):
-            self.log.debug("Calibrate region {}".format(self.regions[r]))
-            # calibrate TT
-            self.log.debug("Calibrate TT")
-            for j in range(self.lenbin["tt"]):
-                bidx1 = self.nbisp["tt",'bin'+np.str(j)]
-                bidx2 = self.nbisp["tt",'bin'+np.str(j+1)]
-                freqi = self.freqspec["tt","freq1"][j]
-                cidxi = self.idxleak[np.str(freqi)]
-                freqj = self.freqspec["tt","freq2"][j]
-                cidxj = self.idxleak[np.str(freqj)]
-                vecmodel[self.regions[r]][bidx1:bidx2] = vecmodel[self.regions[r]][bidx1:bidx2] * self.ct[cidxi] * self.ct[cidxj]
-                self.log.debug("Bin range [{}:{}], idxi = {}, idxj = {}".format(bidx1,bidx2,cidxi,cidxj))
-            # calibrate TE
-            self.log.debug("Calibrate TE")
-            for j in range(self.lenbin["te"]):
-                bidx1 = self.nbisp["te",'bin'+np.str(j)]
-                bidx2 = self.nbisp["te",'bin'+np.str(j+1)]
-                freqi = self.freqspec["te","freq1"][j]
-                cidxi = self.idxleak[np.str(freqi)]
-                freqj = self.freqspec["te","freq2"][j]
-                cidxj = self.idxleak[np.str(freqj)]
-                vecmodel[self.regions[r]][bidx1:bidx2] = vecmodel[self.regions[r]][bidx1:bidx2] * self.ct[cidxi] * self.ct[cidxj] * self.yp[cidxj]
-                self.log.debug("Bin range [{}:{}], idxi = {}, idxj = {}".format(bidx1,bidx2,cidxi,cidxj))
-            # calibrate EE
-            self.log.debug("Calibrate EE")
-            for j in range(self.lenbin["ee"]):
-                bidx1 = self.nbisp["ee",'bin'+np.str(j)]
-                bidx2 = self.nbisp["ee",'bin'+np.str(j+1)]
-                freqi = self.freqspec["ee","freq1"][j]
-                cidxi = self.idxleak[np.str(freqi)]
-                freqj = self.freqspec["ee","freq2"][j]
-                cidxj = self.idxleak[np.str(freqj)]
-                vecmodel[self.regions[r]][bidx1:bidx2] = vecmodel[self.regions[r]][bidx1:bidx2] * self.ct[cidxi] * self.ct[cidxj] * self.yp[cidxi] * self.yp[cidxj]
-                self.log.debug("Bin range [{}:{}], idxi = {}, idxj = {}".format(bidx1,bidx2,cidxi,cidxj))
+        self.idxcal = {np.str(self.freqs[i]):i for i in range(len(self.freqs))}
+        for r in self.regions:
+            ct1 = self.ct[0]
+            ct2 = self.ct[1]
+            yp1 = self.yp[0]
+            yp2 = self.yp[1]
+            self.log.debug("Calibrating region {}".format(r))
+            vecmodel[r][:self.bintt] = vecmodel[r][:self.bintt]*ct1*ct1
+            vecmodel[r][self.bintt:2*self.bintt] = vecmodel[r][self.bintt:2*self.bintt]*ct1*ct2
+            vecmodel[r][2*self.bintt:3*self.bintt] = vecmodel[r][2*self.bintt:3*self.bintt]*ct2*ct2
+            vecmodel[r][3*self.bintt:3*self.bintt+self.binte] = vecmodel[r][3*self.bintt:3*self.bintt+self.binte]*ct1*ct1*yp1
+            vecmodel[r][self.binte+3*self.bintt:3*self.bintt+2*self.binte] = vecmodel[r][self.binte+3*self.bintt:3*self.bintt+2*self.binte]*ct1*ct2*yp2
+            vecmodel[r][2*self.binte+3*self.bintt:3*self.bintt+3*self.binte] = vecmodel[r][2*self.binte+3*self.bintt:3*self.bintt+3*self.binte]*ct1*ct2*yp1
+            vecmodel[r][3*self.binte+3*self.bintt:3*self.bintt+4*self.binte] = vecmodel[r][3*self.binte+3*self.bintt:3*self.bintt+4*self.binte]*ct1*ct2*yp2
+            vecmodel[r][4*self.binte+3*self.bintt:3*self.bintt+4*self.binte+self.binee] = vecmodel[r][4*self.binte+3*self.bintt:3*self.bintt+4*self.binte+self.binee]*ct1*ct1*yp1*yp1
+            vecmodel[r][self.binee+4*self.binte+3*self.bintt:3*self.bintt+4*self.binte+2*self.binee] = vecmodel[r][self.binee+4*self.binte+3*self.bintt:3*self.bintt+4*self.binte+2*self.binee]*ct1*ct2*yp1*yp2
+            vecmodel[r][2*self.binee+3*self.bintt+4*self.binte:3*self.bintt+4*self.binte+3*self.binee] = vecmodel[r][2*self.binee+3*self.bintt+4*self.binte:3*self.bintt+4*self.binte+3*self.binee]*ct2*ct2*yp2*yp2
 
         return vecmodel
 
@@ -334,21 +268,94 @@ class MFLikeACT(Likelihood):
     
     def loglike(self, x_model):
         logp = 0.
-        if self.doLeakage:
-            x_model = self._doLeakage(x_model)
+        x_model = self._doLeakage(x_model)
 
         x_model = self.calibrate(x_model)
 
-        for r in range(self.nlike):
-            diff_vec = self.b_dat[self.regions[r]] - x_model[self.regions[r]]
-            logptmp = - 0.5 * diff_vec @ self.inv_cov[self.regions[r]] @ diff_vec
-            logp += logptmp
+        for r in self.regions:
+            diff_vec = self.b_dat[r] - x_model[r]
+
+            if self.enable_tt and not self.enable_te and not self.enable_ee:
+                bin_no = sum(self.nbintt)
+                diff_vec = diff_vec[:bin_no]
+                subcov = self.covmat[r][:bin_no,:bin_no]
+                inv_covtt = np.linalg.inv(subcov)
+                logptmp = - 0.5 * diff_vec @ inv_covtt @ diff_vec
+                logp += logptmp
+                self.log.debug('Using only TT.')
+            elif not self.enable_tt and self.enable_te and not self.enable_ee:
+                n0 = sum(self.nbintt)
+                bin_no = sum(self.nbinte)
+                diff_vec = diff_vec[n0:n0 + bin_no]
+                subcov = self.covmat[r][n0:n0 + bin_no, n0:n0 + bin_no]
+                inv_covte = np.linalg.inv(subcov)
+                logptmp = - 0.5 * diff_vec @ inv_covte @ diff_vec
+                logp += logptmp
+                self.log.debug('Using only TE.')
+            elif not self.enable_tt and not self.enable_te and self.enable_ee:
+                n0 = sum(self.nbintt) + sum(self.nbinte)
+                bin_no = sum(self.nbinee)
+                diff_vec = diff_vec[n0:n0 + bin_no]
+                subcov = self.covmat[r][n0:n0 + bin_no, n0:n0 + bin_no]
+                inv_covee = np.linalg.inv(subcov)
+                logptmp = - 0.5 * diff_vec @ inv_covee @ diff_vec
+                logp += logptmp
+                self.log.debug('Using only EE.')
+            elif self.enable_tt and self.enable_te and self.enable_ee:
+                self.log.debug('Using TT+TE+EE.')
+                logptmp = - 0.5 * diff_vec @ self.inv_cov[r] @ diff_vec
+                logp += logptmp
+            else:
+                raise Exception('Improper combination of TT/TE/EE spectra selected.')
         
             self.log.debug(
-            "Χ² value computed for region {}"
-            "Χ² = {}".format(self.regions[r],-2 * logptmp))
+            "Χ² value computed for region {} "
+            "Χ² = {}".format(r,-2 * logptmp))
+        self.log.debug("Total Χ² = {}".format(-2 * logp))
         return logp
-    
+
+    def actpol_likelihood_test_compute(self,cellpath):
+        cell = np.loadtxt(cellpath+'bf_ACTPol_lcdm.minimum.theory_cl',usecols=(1,2,3),unpack=True)
+
+        cl = {s: np.zeros(self.tt_lmax+1) for s in self.required_cl}
+        cl['tt'][2:] = cell[0]
+        cl['ee'][2:] = cell[2]
+        cl['te'][2:] = cell[1]
+
+        nuisance_params = {
+                            "yp1": 0.9860632E+00,
+                            "yp2": 0.9714017E+00,
+                            "a_tSZ": 0.5806115E+01,
+                            "a_kSZ": 0.1024734E-03,
+                            "xi": 0.1998220E+00,
+                            "a_p": 0.6872966E+01,
+                            "a_c": 0.3648102E+01,
+                            "beta_p": 0.2447908E+01,
+                            "a_sd": 0.3682240E+01,
+                            "a_gd": 0.2811710E+01,
+                            "a_gted": 0.1049940E+00,
+                            "a_geed": 0.3436806E-01,
+                            "a_pste": 0.4443353E-01,
+                            "a_psee": 0.5342375E-04,
+                            "a_sw": 0.2249012E+02,
+                            "a_gw": 0.8717251E+01,
+                            "a_gtew": 0.3559930E+00,
+                            "a_geew": 0.1293905E+00,
+                            "T_dd": 19.6,
+                            "T_d": 9.7,
+                            "n_CIBC": 1.2,
+                            }
+
+        fg_model = self._get_foreground_model(
+            {k: nuisance_params[k] for k in self.expected_params})
+
+        x_model = self._get_power_spectra(cl,fg_model)
+        self.yp = [nuisance_params[y] for y in self.cal_params]
+
+        logp = self.loglike(x_model)
+
+        return logp
+
     
     
     @property
@@ -411,7 +418,6 @@ def get_foreground_model(fg_params, fg_model,
 
     clszcib = np.loadtxt(tSZxcib_file,usecols=(1),unpack=True)[:ell.max()-1]  
 
-
     ell_clp = ell*(ell+1.)
     ell_0clp = 3000.*3001.
 
@@ -431,89 +437,117 @@ def get_foreground_model(fg_params, fg_model,
     # Make sure to pass a numpy array to fgspectra
     if not isinstance(frequencies, np.ndarray):
         frequencies = np.array(frequencies)
+        
+        fdustd = np.array(fdust['deep'])
+        fdustw = np.array(fdust['wide'])
+        
+        fszd = np.array(fsz['deep'])
+        fszw = np.array(fsz['wide'])
+        
+        fsynd = np.array(fsyn['deep'])
+        fsynw = np.array(fsyn['wide'])
 
-    if not isinstance(fdust, np.ndarray):
-        fdust = np.array(fdust)
+    fszcorrd,f0d = sz_func(fszd,nu_0)
+    fszcorrw,f0w = sz_func(fszw,nu_0)
 
-
-    if not isinstance(fsz, np.ndarray):
-        fsz = np.array(fsz)
-
-
-    if not isinstance(fsyn, np.ndarray):
-        fsyn = np.array(fsyn)
-
-    fszcorr,f0 = sz_func(fsz,nu_0)
-    planckratiod = plankfunctionratio(fdust,nu_0,fg_params["T_d"])
-    fluxtempd = flux2tempratiod(fdust,nu_0)
-
+    planckratiod = plankfunctionratio(fdustd,nu_0,fg_params["T_d"])
+    fluxtempd = flux2tempratiod(fdustd,nu_0)
+     
+    planckratiow = plankfunctionratio(fdustw,nu_0,fg_params["T_d"])
+    fluxtempw = flux2tempratiod(fdustw,nu_0)
 
     model = {}
     
-    #TT Foreground
-    model["tt", "cibc","both"] = fg_params["a_c"] * cibc(
-        {"nu": fdust, "nu_0": nu_0,
-         "temp": fg_params["T_d"], "beta": fg_params["beta_p"]},
-         {'ell':ell, 'ell_0':ell_0})
-
-    model["tt", "cibp","both"] = fg_params["a_p"] * cibp(
-        {"nu": fdust, "nu_0": nu_0,
-         "temp": fg_params["T_d"], "beta": fg_params["beta_p"]},
-        {"ell": ell_clp, "ell_0": ell_0clp, "alpha": 1})
-
-    model["tt", "tSZ","both"] = fg_params["a_tSZ"] * tsz(
-        {"nu": fsz, "nu_0": nu_0},
-        {"ell": ell, "ell_0": ell_0})
-
-    model["tt", "kSZ","both"] = fg_params["a_kSZ"] * ksz(
-        {"nu": (fsz/fsz)},
-        {"ell": ell, "ell_0": ell_0})
-    
-    model["ee", "radio", "both"] = fg_params["a_psee"] * radio(
-        {"nu": fsyn, "nu_0": nu_0, "beta": -0.5 - 2.},
-        {"ell": ell, "ell_0": ell_0,"alpha":1})
-    
-    model["te", "radio", "both"] = fg_params["a_pste"] * radio(
-        {"nu": fsyn, "nu_0": nu_0, "beta": -0.5 - 2.},
-        {"ell": ell, "ell_0": ell_0,"alpha":1})
 
     if "wide" in partitions:
+        model["tt", "cibc","wide"] = fg_params["a_c"] * cibc(
+            {"nu": fdustw, "nu_0": nu_0,
+            "temp": fg_params["T_d"], "beta": fg_params["beta_p"]},
+            {'ell':ell, 'ell_0':ell_0})
+
+        model["tt", "cibp","wide"] = fg_params["a_p"] * cibp(
+            {"nu": fdustw, "nu_0": nu_0,
+            "temp": fg_params["T_d"], "beta": fg_params["beta_p"]},
+            {"ell": ell_clp, "ell_0": ell_0clp, "alpha": 1})
+
+        model["tt", "tSZ","wide"] = fg_params["a_tSZ"] * tsz(
+            {"nu": fszw, "nu_0": nu_0},
+            {"ell": ell, "ell_0": ell_0})
+
+        model["tt", "kSZ","wide"] = fg_params["a_kSZ"] * ksz(
+            {"nu": (fszw/fszw)},
+            {"ell": ell, "ell_0": ell_0})
+
         model["tt", "dust", "wide"] = fg_params["a_gw"] * dust(
-            {"nu": fdust, "nu_0": nu_0,
+            {"nu": fdustw, "nu_0": nu_0,
             "temp": fg_params["T_dd"], "beta": 1.5},
             {"ell": ell, "ell_0": 500., "alpha": -0.6})
 
         model["tt", "radio", "wide"] = fg_params["a_sw"] * radio(
-            {"nu": fsyn, "nu_0": nu_0, "beta": -0.5 - 2.},
-            {"ell": ell_clp, "ell_0": ell_0clp,"alpha":1})      
+            {"nu": fsynw, "nu_0": nu_0, "beta": -0.5 - 2.},
+            {"ell": ell_clp, "ell_0": ell_0clp,"alpha":1}) 
+
+        model["ee", "radio", "wide"] = fg_params["a_psee"] * radio(
+            {"nu": fsynw, "nu_0": nu_0, "beta": -0.5 - 2.},
+            {"ell": ell_clp, "ell_0": ell_0clp,"alpha":1})
         
         model["ee", "dust", "wide"] = fg_params["a_geew"] * dust(
-            {"nu": fdust, "nu_0": nu_0,
+            {"nu": fdustw, "nu_0": nu_0,
             "temp": fg_params["T_dd"], "beta": 1.5},
             {"ell": ell, "ell_0": 500., "alpha": -0.4})
+
+        model["te", "radio", "wide"] = fg_params["a_pste"] * radio(
+            {"nu": fsynw, "nu_0": nu_0, "beta": -0.5 - 2.},
+            {"ell": ell_clp, "ell_0": ell_0clp,"alpha":1})     
         
         model["te", "dust", "wide"] = fg_params["a_gtew"] * dust(
-            {"nu": fdust, "nu_0": nu_0,
+            {"nu": fdustw, "nu_0": nu_0,
             "temp": fg_params["T_dd"], "beta": 1.5},
             {"ell": ell, "ell_0": 500., "alpha": -0.4})
         
     if "deep" in partitions:
+        model["tt", "cibc","deep"] = fg_params["a_c"] * cibc(
+            {"nu": fdustd, "nu_0": nu_0,
+            "temp": fg_params["T_d"], "beta": fg_params["beta_p"]},
+            {'ell':ell, 'ell_0':ell_0})
+
+        model["tt", "cibp","deep"] = fg_params["a_p"] * cibp(
+            {"nu": fdustd, "nu_0": nu_0,
+             "temp": fg_params["T_d"], "beta": fg_params["beta_p"]},
+            {"ell": ell_clp, "ell_0": ell_0clp, "alpha": 1})
+
+        model["tt", "tSZ","deep"] = fg_params["a_tSZ"] * tsz(
+            {"nu": fszd, "nu_0": nu_0},
+            {"ell": ell, "ell_0": ell_0})
+
+        model["tt", "kSZ","deep"] = fg_params["a_kSZ"] * ksz(
+            {"nu": (fszd/fszd)},
+            {"ell": ell, "ell_0": ell_0})
+
         model["tt", "dust", "deep"] = fg_params["a_gd"] * dust(
-            {"nu": fdust, "nu_0": nu_0,
+            {"nu": fdustd, "nu_0": nu_0,
             "temp": fg_params["T_dd"], "beta": 1.5},
             {"ell": ell, "ell_0": 500., "alpha": -0.6})
         
         model["tt", "radio", "deep"] = fg_params["a_sd"] * radio(
-            {"nu": fsyn, "nu_0": nu_0, "beta": -0.5 - 2.},
+            {"nu": fsynd, "nu_0": nu_0, "beta": -0.5 - 2.},
+            {"ell": ell_clp, "ell_0": ell_0clp,"alpha":1})
+
+        model["ee", "radio", "deep"] = fg_params["a_psee"] * radio(
+            {"nu": fsynd, "nu_0": nu_0, "beta": -0.5 - 2.},
             {"ell": ell_clp, "ell_0": ell_0clp,"alpha":1})
         
         model["ee", "dust", "deep"] = fg_params["a_geed"] * dust(
-            {"nu": fdust, "nu_0": nu_0,
+            {"nu": fdustd, "nu_0": nu_0,
             "temp": fg_params["T_dd"], "beta": 1.5},
             {"ell": ell, "ell_0": 500., "alpha": -0.4})
+
+        model["te", "radio", "deep"] = fg_params["a_pste"] * radio(
+            {"nu": fsynd, "nu_0": nu_0, "beta": -0.5 - 2.},
+            {"ell": ell_clp, "ell_0": ell_0clp,"alpha":1})
         
         model["te", "dust", "deep"] = fg_params["a_gted"] * dust(
-            {"nu": fdust, "nu_0": nu_0,
+            {"nu": fdustd, "nu_0": nu_0,
             "temp": fg_params["T_dd"], "beta": 1.5},
             {"ell": ell, "ell_0": 500., "alpha": -0.4})
 
@@ -527,16 +561,21 @@ def get_foreground_model(fg_params, fg_model,
                 for p in np.arange(len(partitions)):
                     fg_dict[s, "all", f1, f2, partitions[p]] = np.zeros(len(ell))
                     for comp in component_list[s]:
-                        if comp == "tSZxcib" and partitions[p] == "both":
+                        if comp == "tSZxcib" and partitions[p] == "deep":
                             fg_dict[s, comp, f1, f2, partitions[p]] = -2. * np.sqrt(fg_params['a_c'] * fg_params['a_tSZ']) * fg_params['xi']\
-                                  * clszcib * ((fdust[c1]**fg_params['beta_p'] * fszcorr[c2]\
-                                  * planckratiod[c1] * fluxtempd[c1]+fdust[c2]**fg_params['beta_p'] \
-                                  * fszcorr[c1] * planckratiod[c2] * fluxtempd[c2])/(2 * nu_0**fg_params['beta_p'] * f0))
+                                  * clszcib * ((fdustd[c1]**fg_params['beta_p'] * fszcorrd[c2]\
+                                  * planckratiod[c1] * fluxtempd[c1]+fdustd[c2]**fg_params['beta_p'] \
+                                  * fszcorrd[c1] * planckratiod[c2] * fluxtempd[c2])/(2 * nu_0**fg_params['beta_p'] * f0d))
+                            fg_dict[s, "all", f1, f2 , partitions[p]] += fg_dict[s, comp, f1, f2, partitions[p]]
+                        elif comp == "tSZxcib" and partitions[p] == "wide":
+                            fg_dict[s, comp, f1, f2, partitions[p]] = -2. * np.sqrt(fg_params['a_c'] * fg_params['a_tSZ']) * fg_params['xi']\
+                                  * clszcib * ((fdustw[c1]**fg_params['beta_p'] * fszcorrw[c2]\
+                                  * planckratiow[c1] * fluxtempw[c1]+fdustw[c2]**fg_params['beta_p'] \
+                                  * fszcorrw[c1] * planckratiow[c2] * fluxtempw[c2])/(2 * nu_0**fg_params['beta_p'] * f0w))
+                            fg_dict[s, "all", f1, f2 , partitions[p]] += fg_dict[s, comp, f1, f2, partitions[p]]
                         else:
-                            try:
-                                fg_dict[s, comp, f1, f2, partitions[p]] = model[s, comp, partitions[p]][c1, c2]
-                                fg_dict[s, "all", f1, f2 , partitions[p]] += fg_dict[s, comp, f1, f2, partitions[p]]
-                            except: continue
+                            fg_dict[s, comp, f1, f2, partitions[p]] = model[s, comp, partitions[p]][c1, c2]
+                            fg_dict[s, "all", f1, f2 , partitions[p]] += fg_dict[s, comp, f1, f2, partitions[p]]
 
     return fg_dict
 

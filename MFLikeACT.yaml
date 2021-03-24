@@ -5,25 +5,27 @@ bintt: 52
 binte: 52
 binee: 52
 
+enable_tt: False
+enable_te: False
+enable_ee: True
+
 # maximum ell for windows and for cross spectra
 lmax_win: 7925
 tt_lmax: 6000
 
-enable_tt: True
-enable_te: True
-enable_ee: True
-
-specname: [coadd_cl_15mJy_data_200124.txt,coadd_cl_100mJy_data_200124.txt]
-covname: [coadd_cov_15mJy_200519.txt, coadd_cov_100mJy_200519.txt]
-bpwfname: [coadd_bpwf_15mJy_191127_lmin2.txt,coadd_bpwf_100mJy_191127_lmin2.txt]
-
-doLeakage: True
-
-leak_TE: [leak_TE_deep_200519.txt,leak_TE_wide_200519.txt]
-
 data:
   frequencies: [98, 150]
-  regions: ["deep", "wide"]
+  regions: 
+    deep:
+      specname: coadd_cl_15mJy_data_200124.txt
+      covname: coadd_cov_15mJy_200519.txt
+      bpwfname: coadd_bpwf_15mJy_191127_lmin2.txt
+      leak_TE: leak_TE_deep_200519.txt
+    wide:
+      specname: coadd_cl_100mJy_data_200124.txt
+      covname: coadd_cov_100mJy_200519.txt
+      bpwfname: coadd_bpwf_100mJy_191127_lmin2.txt
+      leak_TE: leak_TE_wide_200519.txt
 
 spectra:
   use_spectra: ["tt", "te", "ee"]
@@ -43,28 +45,34 @@ foregrounds:
     ell_0: 3000
     T_CMB: 2.725
 
-  partitions: ["both","deep","wide"]
+  partitions: ["deep","wide"]
 
   frequencies: 
     nominal: [98, 150]
-    fdust: [98.8, 151.2]
-    fsz: [98.4, 150.1]
-    fsyn: [95.8, 147.2]
+    fdust: 
+      deep: [98.8, 151.2]
+      wide: [98.8, 150.9]
+    fsz: 
+      deep: [98.4, 150.1]
+      wide: [98.4, 149.9]
+    fsyn: 
+      deep: [95.8, 147.2]
+      wide: [95.8, 147.1]
 
   external_cl: 
     logical: True
-    cibc: /data/Foregrounds/cl_cib_extra.dat
+    cibc: /data/Foregrounds/cib_extra.dat
     tszxcib: /data/Foregrounds/sz_x_cib_template.dat
 
   components:
     tt:
-      - kSZ
-      - cibp
-      - radio
-      - tSZ
       - cibc
-      - tszxcmb
+      - cibp
+      - tSZ
+      - kSZ
       - dust
+      - tSZxcib
+      - radio
     te: 
       - radio
       - dust
@@ -77,37 +85,39 @@ params:
   yp1:
     prior:
       min: 0.9
-      max: 1.1
-    proposal: 1
+      max: 1
+    proposal: 0.01
     latex: y^\mathrm{P}_{98}
   yp2:
     prior:
       min: 0.9
-      max: 1.1
-    proposal: 1
+      max: 1
+    proposal: 0.01
     latex: y^\mathrm{P}_{150}
   # Foregrounds
   a_tSZ:
     prior:
       min: 0
+      max: 10
     proposal: 0.5
     latex: A_\mathrm{tSZ}
   a_kSZ:
     prior:
       min: 0
-    proposal: 0.1
+      max: 10
+    proposal: 0.5
     latex: A_\mathrm{kSZ}
   xi:
     prior:
       min: 0
       max: 0.2
-    proposal: 0.1
+    proposal: 0.05
     latex: \xi
   a_p:
     prior:
-      min: 2
-      max: 7.6
-    proposal: 0.3
+      min: 0
+      max: 11
+    proposal: 1
     latex: A_\mathrm{d}
   a_c:
     prior:
@@ -124,8 +134,8 @@ params:
     latex: \beta_\mathrm{c}
   a_sw:
     prior:
-      min: 18
-      max: 30
+      min: 20
+      max: 24
     proposal: 0.3
     latex: A_\mathrm{s,w}
   a_sd:
@@ -159,11 +169,6 @@ params:
   a_gted:
     prior:
       min: 0
-    ref:
-      dist: norm
-      loc: 0.11
-      scale: 0.10
-    proposal: 0.1
     latex: A_\mathrm{dust,d}^\mathrm{TE}
   a_geew:
     prior:
@@ -175,11 +180,6 @@ params:
   a_geed:
     prior:
       min: 0
-    ref:
-      dist: norm
-      loc: 0.04
-      scale: 0.08
-    proposal: 0.08
     latex: A_\mathrm{dust,d}^\mathrm{EE}
   a_pste:
     prior:
@@ -190,7 +190,6 @@ params:
   a_psee:
     prior:
       min: 0
-      max: 0.1
     proposal: 0.05
     latex: A_\mathrm{ps}^\mathrm{EE}
   T_d: 
@@ -202,3 +201,8 @@ params:
   n_CIBC: 
     value: 1.2
     latex: n_\mathrm{CIB-C}
+
+prior:
+  a_geed: "lambda a_geed: stats.norm.logpdf(a_geed, loc=0.04, scale=0.08)" 
+  a_gted: "lambda a_gted: stats.norm.logpdf(a_gted, loc=0.11, scale=0.10)"
+

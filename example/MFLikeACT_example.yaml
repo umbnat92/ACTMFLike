@@ -5,19 +5,33 @@ likelihood:
     data_folder: /data/ACT/ #Path to the ACT data
     use_sacc: False #Set True if the input files are in .sacc format
 
-    specname: [coadd_cl_15mJy_data_200124.txt,coadd_cl_100mJy_data_200124.txt]
-    covname: [coadd_cov_15mJy_200519.txt, coadd_cov_100mJy_200519.txt]
-    bpwfname: [coadd_bpwf_15mJy_191127_lmin2.txt,coadd_bpwf_100mJy_191127_lmin2.txt]
-
-    leak_TE: [leak_TE_deep_200519.txt,leak_TE_wide_200519.txt]
+    data:
+      frequencies: [98, 150]
+      regions: 
+        deep:
+          specname: coadd_cl_15mJy_data_200124.txt
+          covname: coadd_cov_15mJy_200519.txt
+          bpwfname: coadd_bpwf_15mJy_191127_lmin2.txt
+          leak_TE: leak_TE_deep_200519.txt
+        wide:
+          specname: coadd_cl_100mJy_data_200124.txt
+          covname: coadd_cov_100mJy_200519.txt
+          bpwfname: coadd_bpwf_100mJy_191127_lmin2.txt
+          leak_TE: leak_TE_wide_200519.txt
 
 params:
   # Sampled
-  cosmomc_theta:
+  theta_MC_100:
     prior:
-      min: 0.0103
-      max: 0.0105
-    proposal: 1.5e-6
+      min: 1.03
+      max: 1.05
+    proposal: 1.5e-4
+    latex: 100\theta_\mathrm{MC}
+    drop: True
+    renames: theta
+  cosmomc_theta:
+    value: 'lambda theta_MC_100: 1.e-2*theta_MC_100'
+    derived: false
     latex: \theta_\mathrm{MC}
   logA:
     prior:
@@ -59,7 +73,7 @@ theory:
   camb:
     stop_at_error: False
     extra_args:
-      lens_potential_accuracy: 2
+      lens_potential_accuracy: 1
 
 sampler:
   mcmc:
